@@ -1,0 +1,947 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>명신관 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one-screen tool. 3D stage on the left, floor panel on the right; stacks to stage-over-panel on phones. */
+:root {
+  --bg: #EDF0F5;
+  --surface: #FFFFFF;
+  --ink: #15203A;
+  --muted: #5A6580;
+  --line: #CDD4E1;
+  --accent: #2B3F9C;
+  --accent-soft: #E3E8F8;
+  --pin: #E3242B;
+  --stair: #2F9463;
+  --example: #9A6A00;
+  --example-bg: #FFF4D6;
+  --report: #E8860C;
+  /* 3D materials */
+  --m-slab: #D7DDE8;
+  --m-slab-top: #F7F9FC;
+  --m-edge: #7F8BA5;
+  --m-corridor: #C2CADA;
+  --m-core: #A3AEC4;
+  --m-shell: #9AA8C6;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1422; --surface: #172036; --ink: #E5E9F2; --muted: #95A1BC; --line: #2A3552;
+    --accent: #8D9EFF; --accent-soft: #232E52; --pin: #FF4A4A; --stair: #4CC28A;
+    --example: #F2C14E; --example-bg: #2E2714; --report: #FFA53D;
+    --m-slab: #27314B; --m-slab-top: #34405F; --m-edge: #7C8AAD; --m-corridor: #44517A; --m-core: #56648C; --m-shell: #6F7FA8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1422; --surface: #172036; --ink: #E5E9F2; --muted: #95A1BC; --line: #2A3552;
+  --accent: #8D9EFF; --accent-soft: #232E52; --pin: #FF4A4A; --stair: #4CC28A;
+  --example: #F2C14E; --example-bg: #2E2714; --report: #FFA53D;
+  --m-slab: #27314B; --m-slab-top: #34405F; --m-edge: #7C8AAD; --m-corridor: #44517A; --m-core: #56648C; --m-shell: #6F7FA8;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+}
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 12px;
+  padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 13px; }
+
+.floors { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid var(--line); background: var(--surface);
+  padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  font-family: var(--font-code); font-weight: 600; font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.chip.kr { font-family: var(--font-body); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px; min-height: 0; }
+.stage {
+  position: relative; min-height: 360px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--surface); overflow: hidden;
+}
+.stage canvas { display: block; touch-action: none; }
+#labels { position: absolute; inset: 0; pointer-events: none; }
+.reset {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 5px 10px; font-size: 12px; cursor: pointer;
+}
+.legend {
+  position: absolute; left: 10px; bottom: 10px; z-index: 2;
+  display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: calc(100% - 20px);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; font-size: 11px; color: var(--muted);
+}
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.hint { position: absolute; top: 12px; left: 12px; z-index: 2; font-size: 11px; color: var(--muted); }
+
+/* 3D labels */
+.lbl-room { font-family: var(--font-code); font-size: 10px; font-weight: 500; color: var(--muted); }
+.lbl-mark {
+  font-size: 11px; font-weight: 600; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line);
+  padding: 1px 6px; border-radius: 4px; white-space: nowrap;
+}
+.lbl-mark.stair { border-color: var(--stair); color: var(--stair); }
+.lbl-floor { font-family: var(--font-code); font-size: 13px; font-weight: 600; color: var(--ink); }
+.lbl-floor.dim { color: var(--muted); opacity: .5; }
+.lbl-pin {
+  font-size: 11px; font-weight: 600; color: var(--surface); background: var(--pin);
+  padding: 1px 7px; border-radius: 4px; white-space: nowrap; transform: translateY(-14px);
+}
+
+.panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px; overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.panel h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.notice {
+  background: var(--example-bg); color: var(--ink); border-radius: 8px;
+  padding: 10px 12px; font-size: 12.5px;
+}
+.notice b { color: var(--example); }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.card {
+  text-align: left; width: 100%; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); border-radius: 10px;
+  padding: 10px 12px; display: grid; gap: 4px;
+}
+.card[aria-current="true"] { border-color: var(--pin); box-shadow: 0 0 0 1px var(--pin); }
+.card-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.card-title { font-weight: 600; font-size: 15px; }
+.code { font-family: var(--font-code); font-size: 11px; color: var(--muted); }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); }
+.tag.ex { background: var(--example-bg); color: var(--example); font-weight: 600; }
+.tag.off { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+.check { font-size: 12px; color: var(--example); }
+.dir { font-size: 12.5px; color: var(--muted); }
+.empty { color: var(--muted); font-size: 13px; border: 1px dashed var(--line); border-radius: 10px; padding: 14px; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--bg); padding: 4px; border-radius: 10px; }
+.tabs button { border: 0; background: transparent; padding: 8px 6px; border-radius: 7px; font-weight: 600; font-size: 13.5px; color: var(--muted); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.view { display: flex; flex-direction: column; gap: 14px; }
+.panel h3 { margin: 0 0 8px; font-size: 14px; font-weight: 700; }
+.lbl-pin.rep { background: var(--report); }
+.tag.rep { background: var(--report); color: var(--surface); font-weight: 600; }
+.card.rep[aria-current="true"] { border-color: var(--report); box-shadow: 0 0 0 1px var(--report); }
+.rep-item { display: grid; gap: 4px; }
+.del { justify-self: end; border: 0; background: none; color: var(--muted); font-size: 12px; text-decoration: underline; cursor: pointer; padding: 2px 4px; }
+form.rep-form { display: grid; gap: 6px; }
+.rep-form label, .rep-form .lab { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+.rep-form input, .rep-form select, .rep-form textarea {
+  width: 100%; font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0;
+}
+.rep-form textarea { resize: vertical; }
+.rep-form input:focus-visible, .rep-form select:focus-visible, .rep-form textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pickrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ghost { border: 1px solid var(--report); color: var(--report); background: var(--surface); border-radius: 8px; padding: 6px 12px; font-weight: 600; font-size: 13px; cursor: pointer; }
+.pickstate { font-size: 12.5px; color: var(--muted); }
+.primary { margin-top: 10px; border: 0; background: var(--accent); color: var(--surface); border-radius: 8px; padding: 10px; font-weight: 700; font-size: 14px; cursor: pointer; }
+.primary:disabled { opacity: .45; cursor: not-allowed; }
+.msg { font-size: 12.5px; min-height: 1em; }
+.msg[data-kind="ok"] { color: var(--stair); }
+.msg[data-kind="warn"] { color: var(--example); }
+.pick-banner {
+  position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 3;
+  display: flex; align-items: center; gap: 10px; max-width: calc(100% - 20px);
+  background: var(--report); color: var(--surface); border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 600;
+}
+.pick-banner button { border: 1px solid currentColor; background: none; color: inherit; border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer; }
+.foot { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 6px; }
+
+@media (max-width: 760px) {
+  .app { height: auto; grid-template-rows: auto auto auto; }
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 62vh; min-height: 340px; }
+  .panel { overflow: visible; }
+}
+</style>
+
+<div class="app">
+  <header>
+    <h1>명신관 3D</h1>
+    <span class="sub">지하 1층~6층 건물 구조 · 자판기 위치</span>
+  </header>
+
+  <nav class="floors" aria-label="층 선택">
+    <button class="chip kr" id="f-all" data-floor="all" aria-pressed="true">전체</button>
+    <button class="chip" id="f-b1" data-floor="B1" aria-pressed="false">B1</button>
+    <button class="chip" id="f-1" data-floor="1F" aria-pressed="false">1F</button>
+    <button class="chip" id="f-2" data-floor="2F" aria-pressed="false">2F</button>
+    <button class="chip" id="f-3" data-floor="3F" aria-pressed="false">3F</button>
+    <button class="chip" id="f-4" data-floor="4F" aria-pressed="false">4F</button>
+    <button class="chip" id="f-5" data-floor="5F" aria-pressed="false">5F</button>
+    <button class="chip" id="f-6" data-floor="6F" aria-pressed="false">6F</button>
+  </nav>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <div id="labels"></div>
+      <span class="hint">드래그로 회전 · 두 손가락 또는 휠로 확대</span>
+      <button class="reset" id="reset">시점 초기화</button>
+      <div class="legend" aria-hidden="true">
+        <span><i class="sw" style="background:var(--accent)"></i>엘리베이터</span>
+        <span><i class="sw" style="background:var(--stair)"></i>계단</span>
+        <span><i class="sw" style="background:var(--m-corridor)"></i>복도</span>
+        <span><i class="sw" style="background:var(--pin);border-radius:50%"></i>자판기</span>
+        <span><i class="sw" style="background:var(--report);border-radius:50%"></i>사용자 제보</span>
+      </div>
+      <div class="pick-banner" id="pick-banner" hidden>
+        <span>자판기가 있는 자리를 눌러 주세요</span>
+        <button type="button" id="pick-cancel">취소</button>
+      </div>
+    </div>
+
+    <aside class="panel" id="panel">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-list" aria-selected="true" aria-controls="view-list">자판기 목록</button>
+        <button type="button" role="tab" id="tab-report" aria-selected="false" aria-controls="view-report">새 자판기 제보</button>
+      </div>
+
+      <section class="view" id="view-list" role="tabpanel" aria-labelledby="tab-list">
+        <div>
+          <h2 id="p-title">명신관 전체</h2>
+          <div class="meta" id="p-meta"></div>
+        </div>
+        <div class="notice"><b>조사 데이터 반영</b> 기획팀 자판기 조사 시트 기준입니다. 1층은 안내도가 없어 외곽과 계단만 표시합니다.</div>
+        <div class="list" id="list"></div>
+        <div id="rep-wrap" hidden>
+          <h3>사용자 제보</h3>
+          <div class="list" id="rep-list"></div>
+        </div>
+        <div class="foot">
+        <div>3~6층은 같은 평면 구조입니다. 2층은 엘리베이터 코어 쪽 구역과 201호 쪽 건물이 떨어져 있고, 1층과 지하 1층은 201호 쪽 건물 아래에 있습니다. 중앙계단은 지하 1층부터 6층까지 이어집니다. 일부 층 피난안내도는 180° 돌아간 방향으로 그려져 있어 3·4층 기준으로 방향을 맞췄습니다.</div>
+        <div>화면 앞쪽이 새힘관 연결통로 방향입니다. 호실 번호는 층별 대표 호실만 표시합니다.</div>
+      </div>
+      </section>
+
+      <section class="view" id="view-report" role="tabpanel" aria-labelledby="tab-report" hidden>
+        <div>
+          <h2>새 자판기 제보</h2>
+          <div class="meta">목록에 없는 자판기를 발견했다면 알려 주세요. 등록하면 바로 지도에 주황색 핀으로 표시되고, 확인을 거쳐 정식 목록에 반영됩니다.</div>
+        </div>
+        <form class="rep-form" id="rep-form" novalidate>
+          <label for="r-floor">층</label>
+          <select id="r-floor"><option value="B1">지하 1층</option><option value="1F">1층</option><option value="2F">2층</option><option value="3F">3층</option><option value="4F">4층</option><option value="5F">5층</option><option value="6F">6층</option></select>
+          <label for="r-landmark">위치</label>
+          <input id="r-landmark" type="text" maxlength="40" placeholder="예: 305호 앞, 중앙계단 옆" autocomplete="off">
+          <label for="r-type">종류</label>
+          <select id="r-type"><option>음료</option><option>커피</option><option>스낵</option><option>음료·스낵</option><option>기타</option></select>
+          <span class="lab">3D 위치 (선택)</span>
+          <div class="pickrow">
+            <button type="button" class="ghost" id="r-pick">3D에서 위치 찍기</button>
+            <span class="pickstate" id="r-pick-state">지정 안 함</span>
+          </div>
+          <label for="r-note">메모 (선택)</label>
+          <textarea id="r-note" rows="2" maxlength="120" placeholder="예: 카드 결제 가능, 오후에 자주 품절"></textarea>
+          <button type="submit" class="primary" id="r-submit">제보 등록</button>
+          <div class="msg" id="r-msg" role="status"></div>
+        </form>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+/* ---------- Building data (meters, 3F evacuation-map frame: x = west→east, z = north→south) ---------- */
+const H = 4.2;               // floor-to-floor height
+const WALL = 3.3;
+const FLOORS = ['B1', '1F', '2F', '3F', '4F', '5F', '6F'];
+const BASE = 3;              // index of 3F (y = 0)
+const FLOOR_KO = { B1: '지하 1층', '2F': '2층', '3F': '3층', '4F': '4층', '5F': '5층', '6F': '6층' };
+const NO_VENDING = ['5F'];   // surveyed, none found
+const NO_PLAN = ['1F'];      // no evacuation map yet
+const ELEVATOR = [26.4, 29.6, -4, 0];
+const WEST = [[-53.4,-5],[-1,-5],[-1,19.6],[-53.4,19.6]];      // 201호 쪽 건물 (B1·1F·2F)
+const CENTRAL = [-6, -1.2, -4.8, 6];                            // 중앙계단: B1~6F 연속
+
+/* 3~6F: identical plan */
+const TYPICAL = {
+  elevator: true,
+  parts: [[[-54.8,-4.8],[12.2,-4.8],[12.2,-19.6],[48,-19.6],[48,-6.4],[55.2,-6.4],[55.2,5.2],[46.4,5.2],[46.4,19.6],[-54.8,19.6]]],
+  corridors: [
+    [-46, 40.4, 6, 10.8],
+    [-46, -42, 2, 10.8],
+    [14, 46, -9.4, -6.4],
+    [18.4, 21.6, -6.4, 6],
+    [37.2, 40.4, -6.4, 6],
+  ],
+  core: [21.6, 37.2, -6.4, 6],
+  stairs: [
+    CENTRAL,
+    [-46, -41.6, 10.8, 19.6],
+    [22.2, 24.8, -5.6, 3],
+    [34, 36.6, -5.6, 3],
+  ],
+  link: [-6, -1.2, 19.6, 27],
+  marks: [
+    { t: '엘리베이터 · 화장실', x: 29.4, z: 0 },
+    { t: '중앙계단', x: -3.6, z: 0.6, stair: true },
+    { t: '새힘관 연결통로', x: -3.6, z: 25 },
+    { t: '서쪽 계단', x: -43.8, z: 15.2, stair: true },
+    { t: '화장실', x: -44.4, z: -0.5 },
+  ],
+  tagAt: [-60, 7.6],
+};
+
+/* 2F: cross-shaped core block only (2F map rotated 180°, aligned on the elevator) */
+const SECOND = {
+  elevator: true,
+  parts: [
+    [[48.2,21.6],[11.4,21.6],[11.4,10.4],[7,10.4],[7,-6.4],[12.2,-6.4],[12.2,-18],[49,-18],[49,-4.4],[57.4,-4.4],[57.4,8.8],[48.2,8.8]],
+    WEST,   // 201호 쪽 건물 (not connected on 2F)
+  ],
+  corridors: [
+    [-44.3, -1.2, 6.3, 10.3],
+    [8.6, 51.4, 8.4, 10.4],
+    [8.6, 50.2, -6.4, -4],
+    [19.8, 21.8, -6.4, 10.4],
+    [38.2, 40.2, -6.4, 10.4],
+    [21, 29.6, 10.4, 21.6],
+  ],
+  core: [21.8, 38.2, -6, 8.4],
+  stairs: [
+    [23.4, 25.4, -4, 7.2],
+    [34.6, 36.6, -4, 7.2],
+    CENTRAL,
+    [-6, -1.2, 10.3, 19.6],
+    [-44.8, -40.8, 10.3, 19.4],
+  ],
+  link: null,
+  marks: [
+    { t: '엘리베이터 · 화장실', x: 29.4, z: 2 },
+    { t: '출입구', x: 25.2, z: 23.4 },
+    { t: '중앙계단', x: -3.6, z: 0.6, stair: true },
+    { t: '201호 쪽 출입구', x: -3.6, z: 21.6 },
+    { t: '서쪽 계단', x: -42.8, z: 15, stair: true },
+    { t: '화장실', x: -42.5, z: -1 },
+  ],
+  tagAt: [-58, 7],
+};
+
+const FIRST = { placeholder: true, parts: [WEST], corridors: [], stairs: [CENTRAL, [-44.8, -40.8, 10.3, 19.4]],
+  marks: [{ t: '1층 안내도 없음 · 외곽만 표시', x: -27, z: 9 }, { t: '중앙계단', x: -3.6, z: 0.6, stair: true }, { t: '서쪽 계단', x: -42.8, z: 15, stair: true }], tagAt: [-58, 7] };
+
+const BASEMENT = {
+  parts: [[[-53.5,-5.8],[-1.2,-5.8],[-1.2,19.6],[-53.5,19.6]]],
+  corridors: [
+    [-6, -1.2, 6, 19.6],
+    [-45.5, -42, 2.8, 10.4],
+  ],
+  stairs: [
+    CENTRAL,
+    [-45.5, -42, 10.4, 19.6],
+  ],
+  marks: [
+    { t: '중앙계단', x: -3.6, z: 0.6, stair: true },
+    { t: '지하식당', x: -22, z: 5 },
+    { t: '서쪽 계단', x: -43.8, z: 15, stair: true },
+  ],
+  tagAt: [-58, 7],
+};
+
+const PLAN = { B1: BASEMENT, '1F': FIRST, '2F': SECOND, '3F': TYPICAL, '4F': TYPICAL, '5F': TYPICAL, '6F': TYPICAL };
+
+const ROOMS = {
+  B1: [['B001',-49.7,8],['B003',-49.7,-1.7],['주방',-32.6,0.2],['B002',-21.4,12],['스넥코너',-38.6,14.5]],
+  '1F': [],
+  '2F': [['207',-48.9,7.3],['204',-36.8,0.7],['203',-28,0.7],['202',-19.1,0.7],['201',-10.6,0.7],['208',-36.8,15.4],['209',-27.8,14.9],['210',-19,14.9],['211',-10.6,14.9],['215',52.8,2.2],['221',13.4,1.2],['212',15.8,15.6],['213',31.8,16.4],['214',41.4,16.8],['217',43.4,-12.2],['218',35,-12.4],['219',28.2,-12.4],['220',16.6,-12.6]],
+};
+const SPOTS = { W:[-50.8,7.6], NW:[-38.4,1.2], N:[-11.2,1.2], C:[13.6,0.4], WW:[16.8,-14], WE:[43.2,-14], E:[49.5,-0.6], SW:[-37.6,15.6], S:[16,15.2], SE:[40,14.4] };
+const TYPICAL_ROOMS = {
+  '3F': { W:'305', NW:'304', N:'301', C:'322', WW:'321', WE:'318', E:'317', SW:'308', S:'313', SE:'316' },
+  '4F': { W:'406', NW:'405', N:'402', C:'423', WW:'421', WE:'420', E:'418', SW:'408', S:'414', SE:'417' },
+  '5F': { W:'505', NW:'504', N:'501', C:'525', WW:'524', WE:'521', E:'520', SW:'506', S:'516', SE:'519' },
+  '6F': { W:'605', NW:'604', N:'601', WW:'623', WE:'619', E:'명언재', SW:'606', S:'613', SE:'617' },
+};
+Object.entries(TYPICAL_ROOMS).forEach(([f, m]) => {
+  ROOMS[f] = Object.entries(m).map(([k, t]) => [t, ...SPOTS[k]]);
+});
+
+/* Survey data (기획팀 조사 시트, 2026-10-14) */
+const VENDING = [
+  { id: 'MS-B1-01', floor: 'B1', x: -3.4, z: 11, landmark: '지하식당 출입구', type: '스낵' },
+  { id: 'MS-2F-01', floor: '2F', x: -1.9, z: 7.8, landmark: '중앙계단 앞', type: '음료' },
+  { id: 'MS-2F-02', floor: '2F', x: 20.8, z: 0.4, landmark: '221호 옆', type: '음료·스낵' },
+  { id: 'MS-3F-01', floor: '3F', x: 1.0, z: 7.0, landmark: '324호 옆', type: '음료' },
+  { id: 'MS-4F-01', floor: '4F', x: -7.6, z: 7.0, landmark: '402A호 앞', type: '음료' },
+  { id: 'MS-6F-01', floor: '6F', x: 16.8, z: -7.9, landmark: '623호 앞', type: '음료' },
+];
+
+/* ---------- Scene ---------- */
+const stage = document.getElementById('stage');
+const labelHost = document.getElementById('labels');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+stage.prepend(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer({ element: labelHost });
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.48;
+controls.minDistance = 25;
+controls.maxDistance = 400;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8890a0, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+sun.position.set(60, 120, 80);
+scene.add(sun);
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function extrude(foot, depth) {
+  const s = new THREE.Shape();
+  foot.forEach(([x, z], i) => i ? s.lineTo(x, -z) : s.moveTo(x, -z));
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false });
+  g.rotateX(-Math.PI / 2);
+  return g;
+}
+const geoCache = new Map();
+function planGeo(plan) {
+  if (!geoCache.has(plan)) {
+    geoCache.set(plan, plan.parts.map(foot => {
+      const shell = extrude(foot, WALL);
+      return { slab: extrude(foot, 0.35), shell, edges: new THREE.EdgesGeometry(shell, 20) };
+    }));
+  }
+  return geoCache.get(plan);
+}
+
+function box([x1, x2, z1, z2], y0, h, mat) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(x2 - x1, h, z2 - z1), mat);
+  m.position.set((x1 + x2) / 2, y0 + h / 2, (z1 + z2) / 2);
+  return m;
+}
+function label(text, cls, x, y, z) {
+  const el = document.createElement('div');
+  el.className = cls;
+  el.textContent = text;
+  const o = new CSS2DObject(el);
+  o.position.set(x, y, z);
+  scene.add(o);
+  return o;
+}
+
+const floors = {};
+const pinMats = [];
+function mat(kind, base = 1, opts = {}) {
+  const m = kind === 'line'
+    ? new THREE.LineBasicMaterial({ transparent: true, opacity: base })
+    : new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, transparent: true, opacity: base, ...opts });
+  m.userData.base = base;
+  return m;
+}
+
+/* kind: 'pin' (조사 데이터) | 'report' (사용자 제보) */
+function makePin(v, y, kind) {
+  const pg = new THREE.Group();
+  pg.position.set(v.x, y + 0.35, v.z);
+  const pm = new THREE.MeshStandardMaterial({ roughness: 0.4, emissiveIntensity: 0.45 });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 2.6, 8), pm); pole.position.y = 1.3;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.9, 20, 14), pm); head.position.y = 3.0;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 1.3, 28), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.08;
+  pg.add(pole, head, ring);
+  head.userData.vid = v.id;
+  scene.add(pg);
+  const lb = label(v.landmark, kind === 'report' ? 'lbl-pin rep' : 'lbl-pin', v.x, y + 4.6, v.z);
+  const entry = { kind, pin: pm, ring: ring.material };
+  pinMats.push(entry);
+  return { v, kind, group: pg, head, label: lb, entry };
+}
+
+FLOORS.forEach((id, i) => {
+  const y = (i - BASE) * H;   // 3F sits at y = 0
+  const plan = PLAN[id];
+  const G = planGeo(plan);
+  const g = new THREE.Group();
+  g.position.y = y;
+  const M = {
+    slab: mat('std', 1), shell: mat('std', 0.07, { depthWrite: false, side: THREE.DoubleSide }),
+    edge: mat('line', 0.9), corridor: mat('std', 1), core: mat('std', 1),
+    elev: mat('std', 0.95), stair: mat('std', 1), link: mat('std', 0.55, { depthWrite: false }),
+  };
+  if (plan.placeholder) { M.slab.userData.base = 0.35; M.edge.userData.base = 0.5; }
+  const slabs = [];
+  G.forEach(part => {
+    const slab = new THREE.Mesh(part.slab, M.slab); g.add(slab); slabs.push(slab);
+    const shell = new THREE.Mesh(part.shell, M.shell); shell.position.y = 0.35; g.add(shell);
+    const edges = new THREE.LineSegments(part.edges, M.edge); edges.position.y = 0.35; g.add(edges);
+  });
+  plan.corridors.forEach(c => g.add(box(c, 0.35, 0.06, M.corridor)));
+  if (plan.core) g.add(box(plan.core, 0.35, 2.2, M.core));
+  if (plan.elevator) g.add(box(ELEVATOR, 0.35, H - 0.35, M.elev));
+  plan.stairs.forEach(s => g.add(box(s, 0.35, 0.9, M.stair)));
+  if (plan.link) g.add(box(plan.link, 0.35, 2.8, M.link));
+  scene.add(g);
+
+  const labels = [];
+  plan.marks.forEach(m => labels.push(label(m.t, 'lbl-mark' + (m.stair ? ' stair' : ''), m.x, y + 2.6, m.z)));
+  ROOMS[id].forEach(([t, x, z]) => labels.push(label(t, 'lbl-room', x, y + 0.9, z)));
+  const tag = label(id, 'lbl-floor', plan.tagAt[0], y + 1.6, plan.tagAt[1]);
+
+  const pins = VENDING.filter(v => v.floor === id).map(v => makePin(v, y, 'pin'));
+  floors[id] = { id, i, y, group: g, M, labels, tag, pins, slabs };
+});
+
+/* Pick marker for the report form */
+const pickMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, side: THREE.DoubleSide });
+const pickMarker = new THREE.Mesh(new THREE.RingGeometry(0.6, 1.6, 32), pickMat);
+pickMarker.rotation.x = -Math.PI / 2;
+pickMarker.visible = false;
+scene.add(pickMarker);
+
+/* ---------- Theme ---------- */
+function applyTheme() {
+  const c = n => new THREE.Color(css(n));
+  Object.values(floors).forEach(f => {
+    f.M.slab.color = c('--m-slab-top');
+    f.M.shell.color = c('--m-shell');
+    f.M.edge.color = c('--m-edge');
+    f.M.corridor.color = c('--m-corridor');
+    f.M.core.color = c('--m-core');
+    f.M.elev.color = c('--accent');
+    f.M.stair.color = c('--stair');
+    f.M.link.color = c('--m-shell');
+  });
+  pinMats.forEach(({ kind, pin, ring }) => {
+    const col = c(kind === 'report' ? '--report' : '--pin');
+    pin.color = col; pin.emissive = col; ring.color = col;
+  });
+  pickMat.color = c('--report');
+}
+applyTheme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* ---------- State & view ---------- */
+let current = 'all';
+let selected = null;
+let reports = [];        // flattened user reports
+let reportPins = [];
+let amOwner = false;
+
+const allItems = () => VENDING.concat(reports);
+const allPins = () => Object.values(floors).flatMap(f => f.pins).concat(reportPins);
+
+function setAlpha(f, a) {
+  Object.values(f.M).forEach(m => {
+    m.opacity = m.userData.base * a;
+    m.depthWrite = a > 0.95 && m.userData.base === 1;
+  });
+}
+
+function fitFactor() {
+  const a = camera.aspect;
+  return a < 0.8 ? 2.1 : a < 1.2 ? 1.5 : 1;
+}
+
+let tween = null;
+function flyTo(target, offset) {
+  const pos = target.clone().add(offset.clone().multiplyScalar(fitFactor()));
+  if (reduceMotion) { controls.target.copy(target); camera.position.copy(pos); return; }
+  tween = { t0: performance.now(), dur: 750, fT: controls.target.clone(), fP: camera.position.clone(), tT: target, tP: pos };
+}
+controls.addEventListener('start', () => { tween = null; });
+
+const ALL_TARGET = new THREE.Vector3(0, H * 0.2, 3);
+const ALL_OFFSET = new THREE.Vector3(72, 84, 124);
+function homeView() {
+  if (current === 'all') flyTo(ALL_TARGET.clone(), ALL_OFFSET);
+  else {
+    const cx = ['B1', '1F'].includes(current) ? -21 : 0;
+    flyTo(new THREE.Vector3(cx, floors[current].y, 3), new THREE.Vector3(48, 64, 80));
+  }
+}
+
+function refreshPins() {
+  const ci = current === 'all' ? null : floors[current].i;
+  allPins().forEach(p => {
+    const f = floors[p.v.floor];
+    const vis = f.group.visible && (ci === null || f.i === ci);
+    p.group.visible = vis;
+    p.label.visible = vis;
+    p.head.scale.setScalar(p.v.id === selected ? 1.35 : 1);
+    p.label.element.style.outline = p.v.id === selected ? '2px solid var(--ink)' : '';
+  });
+}
+
+function setFloor(id) {
+  current = id;
+  const ci = id === 'all' ? null : floors[id].i;
+  FLOORS.forEach(fid => {
+    const f = floors[fid];
+    let a = 1, vis = true;
+    if (ci !== null && f.i < ci) a = 0.22;
+    if (ci !== null && f.i > ci) { a = 0; vis = false; }
+    f.group.visible = vis;
+    setAlpha(f, a);
+    const active = ci !== null && f.i === ci;
+    f.labels.forEach(l => l.visible = active);
+    f.tag.visible = vis;
+    f.tag.element.classList.toggle('dim', ci !== null && !active);
+  });
+  document.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.floor === id)));
+  refreshPins();
+  renderPanel();
+  homeView();
+}
+
+const placed = v => v.in3d !== false && Number.isFinite(v.x) && Number.isFinite(v.z) && floors[v.floor];
+
+function selectPin(vid, moveCamera = true) {
+  selected = vid;
+  const v = allItems().find(x => x.id === vid);
+  if (v && placed(v) && current !== 'all' && current !== v.floor) setFloor(v.floor);
+  refreshPins();
+  renderPanel();
+  if (v && placed(v) && moveCamera) {
+    flyTo(new THREE.Vector3(v.x, floors[v.floor].y + 1, v.z), new THREE.Vector3(22, 30, 36));
+  }
+}
+
+/* ---------- Panel ---------- */
+function addTags(host, list) {
+  list.forEach(([txt, c]) => { const s = document.createElement('span'); s.className = c; s.textContent = txt; host.append(s); });
+}
+function cardFor(v, { report = false } = {}) {
+  const b = document.createElement('button');
+  b.className = report ? 'card rep' : 'card';
+  b.setAttribute('aria-current', String(selected === v.id));
+  b.innerHTML = `
+    <div class="card-top"><span class="card-title"></span><span class="code"></span></div>
+    <div class="tags"></div>`;
+  b.querySelector('.card-title').textContent = `${FLOOR_KO[v.floor] || v.floor} ${v.landmark}`;
+  b.querySelector('.code').textContent = report ? fmtDate(v.createdAt) : v.id;
+  const t = [];
+  if (report) t.push(['제보', 'tag rep']);
+  t.push([v.type, 'tag']);
+  if (v.in3d === false) t.push(['3D 미포함', 'tag off']);
+  if (report && !placed(v)) t.push(['3D 위치 없음', 'tag off']);
+  addTags(b.querySelector('.tags'), t);
+  if (report && v.note) {
+    const d = document.createElement('div'); d.className = 'dir'; d.textContent = v.note; b.append(d);
+  }
+  b.addEventListener('click', () => selectPin(v.id));
+  return b;
+}
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : `${d.getMonth() + 1}/${d.getDate()} 제보`;
+}
+
+function renderPanel() {
+  const title = document.getElementById('p-title');
+  const meta = document.getElementById('p-meta');
+  const list = document.getElementById('list');
+  const repWrap = document.getElementById('rep-wrap');
+  const repList = document.getElementById('rep-list');
+  const items = VENDING.filter(v => current === 'all' || v.floor === current);
+  const reps = reports.filter(v => current === 'all' || v.floor === current);
+  title.textContent = current === 'all' ? '명신관 전체' : `명신관 ${FLOOR_KO[current]}`;
+  meta.textContent = (current === 'all' ? '지하 1층~6층 · ' : '') + `자판기 ${items.length}대` + (reps.length ? ` · 사용자 제보 ${reps.length}건` : '');
+  list.replaceChildren();
+  if (!items.length) {
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = NO_VENDING.includes(current)
+      ? '조사 결과 이 층에는 자판기가 없습니다.'
+      : NO_PLAN.includes(current)
+        ? '1층은 조사 시트에 항목이 없고 안내도도 아직 없습니다.'
+        : '이 층에 등록된 자판기가 아직 없습니다.';
+    list.append(e);
+  }
+  items.forEach(v => list.append(cardFor(v)));
+
+  repList.replaceChildren();
+  repWrap.hidden = !reps.length;
+  reps.forEach(v => {
+    const wrap = document.createElement('div');
+    wrap.className = 'rep-item';
+    wrap.append(cardFor(v, { report: true }));
+    if (amOwner) {
+      const del = document.createElement('button');
+      del.className = 'del'; del.type = 'button'; del.textContent = '이 제보 삭제';
+      del.addEventListener('click', () => deleteReport(v, del));
+      wrap.append(del);
+    }
+    repList.append(wrap);
+  });
+}
+
+/* ---------- Tabs ---------- */
+const tabList = document.getElementById('tab-list');
+const tabReport = document.getElementById('tab-report');
+function showTab(which) {
+  const rep = which === 'report';
+  tabList.setAttribute('aria-selected', String(!rep));
+  tabReport.setAttribute('aria-selected', String(rep));
+  document.getElementById('view-list').hidden = rep;
+  document.getElementById('view-report').hidden = !rep;
+  if (!rep) stopPicking();
+}
+tabList.addEventListener('click', () => showTab('list'));
+tabReport.addEventListener('click', () => showTab('report'));
+
+/* ---------- Report form ---------- */
+const fFloor = document.getElementById('r-floor');
+const fLandmark = document.getElementById('r-landmark');
+const fType = document.getElementById('r-type');
+const fNote = document.getElementById('r-note');
+const fPick = document.getElementById('r-pick');
+const fPickState = document.getElementById('r-pick-state');
+const fSubmit = document.getElementById('r-submit');
+const fMsg = document.getElementById('r-msg');
+const pickBanner = document.getElementById('pick-banner');
+
+let picking = false;
+let picked = null;   // {floor, x, z}
+
+function setMsg(text, kind = '') { fMsg.textContent = text; fMsg.dataset.kind = kind; }
+
+function clearPick() {
+  picked = null;
+  pickMarker.visible = false;
+  fPickState.textContent = '지정 안 함';
+}
+function startPicking() {
+  picking = true;
+  setFloor(fFloor.value);
+  pickBanner.hidden = false;
+  fPick.textContent = '위치 찍기 취소';
+  if (matchMedia('(max-width: 760px)').matches) stage.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+}
+function stopPicking() {
+  picking = false;
+  pickBanner.hidden = true;
+  fPick.textContent = picked ? '위치 다시 찍기' : '3D에서 위치 찍기';
+}
+fPick.addEventListener('click', () => picking ? stopPicking() : startPicking());
+document.getElementById('pick-cancel').addEventListener('click', stopPicking);
+fFloor.addEventListener('change', () => { clearPick(); if (picking) setFloor(fFloor.value); stopPicking(); });
+
+function pickAt(ray) {
+  const f = floors[fFloor.value];
+  const hit = ray.intersectObjects(f.slabs)[0];
+  if (!hit) return false;
+  picked = { floor: f.id, x: Math.round(hit.point.x * 10) / 10, z: Math.round(hit.point.z * 10) / 10 };
+  pickMarker.position.set(picked.x, f.y + 0.45, picked.z);
+  pickMarker.visible = true;
+  fPickState.textContent = `${f.id}에 위치 지정됨`;
+  stopPicking();
+  return true;
+}
+
+let db = null, uid = null, busy = false;
+
+function formAvailable(ok, why = '') {
+  fSubmit.disabled = !ok;
+  if (!ok) setMsg(why, 'warn');
+}
+
+document.getElementById('rep-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (busy) return;
+  const landmark = fLandmark.value.trim();
+  if (!landmark) { setMsg('위치를 입력해 주세요. 예: 305호 앞', 'warn'); fLandmark.focus(); return; }
+  if (!db || !uid) { setMsg('지금은 제보를 저장할 수 없습니다. Claude에 로그인한 상태로 이 페이지를 열어 주세요.', 'warn'); return; }
+  const item = {
+    id: 'R-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    floor: fFloor.value,
+    landmark: landmark.slice(0, 40),
+    type: fType.value,
+    note: fNote.value.trim().slice(0, 120),
+    createdAt: new Date().toISOString(),
+  };
+  if (picked && picked.floor === item.floor) { item.x = picked.x; item.z = picked.z; }
+  busy = true; fSubmit.disabled = true; setMsg('등록하는 중…');
+  try {
+    const ref = db.doc('reports/' + uid);
+    const cur = await ref.get();
+    const prev = cur.exists && Array.isArray(cur.data().items) ? cur.data().items : [];
+    await ref.set({ items: prev.concat([item]) });
+    setMsg('제보가 등록되었습니다. 지도에 주황색 핀으로 표시됩니다.', 'ok');
+    fLandmark.value = ''; fNote.value = '';
+    clearPick(); stopPicking();
+  } catch (err) {
+    const code = err && err.code;
+    setMsg(code === 'invalid_argument'
+      ? '이 계정에는 제보 권한이 없습니다. 페이지 소유자에게 참여자(Contributor) 이상 권한을 요청해 주세요.'
+      : code === 'quota_exceeded'
+        ? '저장 공간이 가득 찼습니다. 페이지 소유자에게 알려 주세요.'
+        : '등록하지 못했습니다. 잠시 후 다시 시도해 주세요.', 'warn');
+  } finally {
+    busy = false; fSubmit.disabled = false;
+  }
+});
+
+async function deleteReport(v, btn) {
+  if (!db || busy) return;
+  if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = '한 번 더 누르면 삭제'; return; }
+  busy = true; btn.disabled = true;
+  try {
+    const ref = db.doc('reports/' + v.uid);
+    const cur = await ref.get();
+    const prev = cur.exists && Array.isArray(cur.data().items) ? cur.data().items : [];
+    await ref.set({ items: prev.filter(x => x && x.id !== v.id) });
+    if (selected === v.id) selected = null;
+  } catch {
+    btn.textContent = '삭제하지 못했습니다';
+  } finally { busy = false; }
+}
+
+/* Validate untrusted rows from the shared store */
+function cleanReport(raw, ownerUid) {
+  if (!raw || typeof raw !== 'object') return null;
+  const floor = String(raw.floor || '');
+  if (!FLOORS.includes(floor)) return null;
+  const r = {
+    id: String(raw.id || '').slice(0, 40), uid: ownerUid, floor,
+    landmark: String(raw.landmark || '').slice(0, 40) || '위치 미입력',
+    type: String(raw.type || '기타').slice(0, 12),
+    note: String(raw.note || '').slice(0, 120),
+    createdAt: String(raw.createdAt || ''),
+  };
+  if (!r.id) return null;
+  const x = Number(raw.x), z = Number(raw.z);
+  if (Number.isFinite(x) && Number.isFinite(z) && Math.abs(x) < 80 && Math.abs(z) < 40) { r.x = x; r.z = z; }
+  return r;
+}
+
+function rebuildReportPins() {
+  reportPins.forEach(p => {
+    scene.remove(p.group); scene.remove(p.label);
+    const k = pinMats.indexOf(p.entry); if (k >= 0) pinMats.splice(k, 1);
+  });
+  reportPins = reports.filter(placed).map(r => makePin(r, floors[r.floor].y, 'report'));
+  applyTheme();
+  refreshPins();
+}
+
+async function connectStore() {
+  const cl = window.claude;
+  if (!cl || typeof cl.use !== 'function') { formAvailable(false, '제보 기능은 Claude에서 이 페이지를 열었을 때 사용할 수 있습니다.'); return; }
+  const [dbNs, userNs] = await Promise.all([cl.use('db'), cl.use('user')]);
+  db = dbNs;
+  if (userNs) {
+    try { uid = await userNs.id(); } catch { uid = null; }
+    try { amOwner = await userNs.isOwner(); } catch { amOwner = false; }
+  }
+  if (!db || !uid) {
+    formAvailable(false, '제보하려면 Claude에 로그인한 상태로 이 페이지를 열어 주세요. 등록된 자판기 목록은 그대로 볼 수 있습니다.');
+  } else {
+    formAvailable(true);
+  }
+  if (db) {
+    db.collection('reports').onSnapshot(snap => {
+      const out = [];
+      snap.docs.forEach(d => {
+        const body = d.data();
+        (Array.isArray(body && body.items) ? body.items : []).forEach(raw => {
+          const r = cleanReport(raw, d.id);
+          if (r) out.push(r);
+        });
+      });
+      out.sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
+      reports = out;
+      rebuildReportPins();
+      renderPanel();
+    }, () => { /* store unavailable: official data still shows */ });
+  }
+}
+connectStore();
+
+/* ---------- Picking ---------- */
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let down = null;
+renderer.domElement.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  if (picking) { pickAt(ray); return; }
+  const heads = allPins().filter(p => p.group.visible).map(p => p.head);
+  const hit = ray.intersectObjects(heads)[0];
+  if (hit) selectPin(hit.object.userData.vid, false);
+});
+
+/* ---------- Controls ---------- */
+document.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => setFloor(b.dataset.floor)));
+document.getElementById('reset').addEventListener('click', homeView);
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h);
+  labelRenderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+
+camera.position.copy(ALL_OFFSET).multiplyScalar(fitFactor()).add(ALL_TARGET);
+controls.target.copy(ALL_TARGET);
+setFloor('all');
+
+const ease = t => 1 - Math.pow(1 - t, 3);
+renderer.setAnimationLoop(now => {
+  if (tween) {
+    const k = Math.min(1, (now - tween.t0) / tween.dur), e = ease(k);
+    controls.target.lerpVectors(tween.fT, tween.tT, e);
+    camera.position.lerpVectors(tween.fP, tween.tP, e);
+    if (k === 1) tween = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+});
+</script>
+
+</body></html>
